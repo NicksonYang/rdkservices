@@ -123,7 +123,11 @@ namespace WPEFramework {
             static const string RDKSHELL_METHOD_HIDE_ALL_CLIENTS;
             static const string RDKSHELL_METHOD_GET_SCREENSHOT;
             static const string RDKSHELL_METHOD_ENABLE_EASTER_EGGS;
-
+            static const string RDKSHELL_METHOD_SETCAMERAINFO;
+            static const string RDKSHELL_METHOD_CHECKCAMERAUSE;
+            static const string RDKSHELL_METHOD_SENDAUDIOTOCAMERA;            
+            static const string RDKSHELL_METHOD_STOPCONNECTTOCAMERA;
+            
             // events
             static const string RDKSHELL_EVENT_ON_USER_INACTIVITY;
             static const string RDKSHELL_EVENT_ON_APP_LAUNCHED;
@@ -223,6 +227,10 @@ namespace WPEFramework {
             uint32_t hideAllClientsWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t getScreenshotWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t enableEasterEggsWrapper(const JsonObject& parameters, JsonObject& response);
+            uint32_t setCameraInfo(const JsonObject& parameters, JsonObject& response);
+            uint32_t checkCameraUse(const JsonObject& parameters, JsonObject& response);
+            uint32_t sendAudioToCamera(const JsonObject& parameters, JsonObject& response);
+            uint32_t stopConnectToCamera(const JsonObject& parameters, JsonObject& response);
 
         private/*internal methods*/:
             RDKShell(const RDKShell&) = delete;
