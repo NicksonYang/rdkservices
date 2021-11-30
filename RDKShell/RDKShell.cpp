@@ -114,7 +114,10 @@ const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_GET_LAST_WAKEUP_KEY
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_HIDE_ALL_CLIENTS = "hideAllClients";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_GET_SCREENSHOT = "getScreenshot";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_ENABLE_EASTER_EGGS = "enableEasterEggs";
-
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_SETCAMERAINFO = "setCameraInfo";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_CHECKCAMERAUSE = "checkCameraUse";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_SENDAUDIOTOCAMERA = "sendAudioToCamera";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_STOPCONNECTTOCAMERA = "stopConnectToCamera";
 
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_USER_INACTIVITY = "onUserInactivity";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_APP_LAUNCHED = "onApplicationLaunched";
@@ -779,6 +782,10 @@ namespace WPEFramework {
             registerMethod(RDKSHELL_METHOD_HIDE_ALL_CLIENTS, &RDKShell::hideAllClientsWrapper, this);
             registerMethod(RDKSHELL_METHOD_GET_SCREENSHOT, &RDKShell::getScreenshotWrapper, this);
             registerMethod(RDKSHELL_METHOD_ENABLE_EASTER_EGGS, &RDKShell::enableEasterEggsWrapper, this);
+	    registerMethod(RDKSHELL_METHOD_SETCAMERAINFO, &RDKShell::setCameraInfo, this);
+	    registerMethod(RDKSHELL_METHOD_CHECKCAMERAUSE, &RDKShell::checkCameraUse, this);
+	    registerMethod(RDKSHELL_METHOD_SENDAUDIOTOCAMERA, &RDKShell::sendAudioToCamera, this);
+	    registerMethod(RDKSHELL_METHOD_STOPCONNECTTOCAMERA, &RDKShell::stopConnectToCamera, this);
 
             m_timer.connect(std::bind(&RDKShell::onTimer, this));
         }
@@ -4988,6 +4995,144 @@ namespace WPEFramework {
             gRdkShellMutex.unlock();
             returnResponse(result);
         }
+	
+	uint32_t RDKShell::setCameraInfo(const JsonObject& parameters, JsonObject& response)
+        {
+            bool status = false;
+            char buffer[512] = "";
+            string urlSave = "";
+
+            returnIfParamNotFound(parameters, "videoPlayUrl");
+            returnIfParamNotFound(parameters, "audioUploadUrl");
+            string videoUrl = parameters["videoPlayUrl"].String();
+            string audioUrl = parameters["audioUploadUrl"].String();
+
+            urlSave = "videoPlayUrl=rtsp://administrator:123456@" + videoUrl + " " + "audioUploadUrl=http://administrator:123456@" + audioUrl + " ";
+            strcpy(buffer,urlSave.c_str());
+
+            if (Utils::fileExists("/opt/camerainfo.txt")) {
+                remove("/opt/camerainfo.txt");
+            }
+            FILE* fp = fopen("/opt/camerainfo.txt", "w+");
+            if (NULL != fp) {
+                fwrite(&buffer, sizeof(buffer), 1, fp);
+                status = true;
+                fclose(fp);
+            }
+
+            returnResponse(status);
+        }
+
+	uint32_t RDKShell::checkCameraUse(const JsonObject& parameters, JsonObject& response)
+        {
+            bool status = false;
+            char videoUrl[256] = "";
+            char audioUrl[256] = "";
+            string videoPlayUrl;
+            string audioUploadUrl;
+
+            if (!Utils::fileExists("/opt/camerainfo.txt")) {
+                status = true;
+                response["flag"] = 0;
+            }
+            else
+            {
+                FILE* fp = fopen("/opt/camerainfo.txt", "r");
+                if (NULL == fp) {
+                    response["flag"] = -1;
+                }
+                else{
+
+                    fscanf(fp, "videoPlayUrl=%s audioUploadUrl=%s",&videoUrl,&audioUrl);
+                    status = true;
+                    videoPlayUrl = videoUrl;
+                    audioUploadUrl = audioUrl;
+                    fclose(fp);
+                    response["flag"] = 1;
+                    response["videoPlayUrl"] = videoPlayUrl;
+                    response["audioUploadUrl"] = audioUploadUrl;
+                }
+
+            }
+
+            returnResponse(status);
+        }
+
+	uint32_t RDKShell::sendAudioToCamera(const JsonObject& parameters, JsonObject& response)
+        {
+            bool status = false;
+            char buffer[512] = {0};
+            char vbuffer[512] = {0};
+            int result = -1;
+            int vresult = -1;
+
+            returnIfParamNotFound(parameters, "audioUploadUrl");
+            returnIfParamNotFound(parameters, "videoPlayUrl");
+            string audioUrl = parameters["audioUploadUrl"].String();
+            string videoUrl = parameters["videoPlayUrl"].String();
+
+            if (Utils::fileExists("/opt/camerainfo.txt")) {
+                remove("/opt/camerainfo.txt");
+            }
+
+            sprintf(buffer,"/usr/bin/audio_upload_to_camera %s &", audioUrl.c_str());
+            sprintf(vbuffer,"/usr/bin/gst-launch-1.0 playbin uri=%s videosink=westerossink &", videoUrl.c_str());
+
+            system("rm -rf ~/.cache/");
+            vresult = system(vbuffer);
+            result = system(buffer);
+            if(-1 != result && (vresult != -1))
+                status = true;
+
+            returnResponse(status);
+        }
+        uint32_t RDKShell::stopConnectToCamera(const JsonObject& parameters, JsonObject& response)
+        {
+        	bool status = false;
+            FILE *fp = NULL;
+            FILE *vfp = NULL;
+            char buf[10] = {0};
+            char cmd[64] = {0};
+            int result = -1;
+            int num = 0;
+
+            if (Utils::fileExists("/opt/camerainfo.txt")) {
+                remove("/opt/camerainfo.txt");
+            }
+
+            fp = popen("ps -ef|grep audio_upload_to_camera|grep -v grep|awk '{print $2}'", "r");
+            if (NULL != fp) {
+                if(fread(buf,sizeof(char),sizeof(buf),fp) > 0)
+                {
+                    sprintf(cmd,"kill -9 %s", buf);
+                    result = system(cmd);
+                    if(-1 != result)
+                        num++;
+                }
+            }
+
+            memset(buf,0,sizeof(buf));
+            memset(cmd,0,sizeof(cmd));
+
+            vfp = popen("ps -ef|grep gst-launch-1.0|grep -v grep|awk '{print $2}'", "r");
+            if (NULL != vfp) {
+                if(fread(buf,sizeof(char),sizeof(buf),vfp) > 0)
+                {
+                    sprintf(cmd,"kill -9 %s", buf);
+                    result = system(cmd);
+                    if(-1 != result)
+                        num++;
+                }
+            }
+
+            if(num == 2)
+                status = true;
+
+            pclose(fp);
+            pclose(vfp);
+            returnResponse(status);
+        }
+	
         // Registered methods end
 
         // Events begin
